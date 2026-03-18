@@ -1,70 +1,146 @@
-# Getting Started with Create React App
+# Baseline 🏀
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+> ML-powered NBA player prop prediction engine that helps you make smarter betting decisions.
 
-## Available Scripts
+![Python](https://img.shields.io/badge/Python-3.8+-blue)
+![React](https://img.shields.io/badge/React-18-61DAFB)
+![Flask](https://img.shields.io/badge/Flask-REST%20API-green)
+![XGBoost](https://img.shields.io/badge/ML-XGBoost-orange)
 
-In the project directory, you can run:
+---
 
-### `npm start`
+## What It Does
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Baseline predicts NBA player point totals for any given matchup using historical game data, rolling performance trends, and real-time injury reports. Select a game from today's schedule — Baseline shows every player on both rosters with a data-driven point prediction.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+---
 
-### `npm test`
+## Features
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- 🏀 **Live Game Schedule** — pulls today's NBA games in real time
+- 🔮 **Player Predictions** — XGBoost regression model trained on 4 seasons of NBA data
+- 📊 **Feature Engineering** — rolling averages, opponent matchup history, rest days, home/away splits
+- 🏥 **Injury Awareness** — real-time injury data via ESPN API
+- ⚡ **Smart Caching** — player stats cached locally to prevent API rate limiting
+- 🌐 **REST API** — Flask backend serving predictions as JSON
+- 💻 **React Dashboard** — clean dark UI for browsing games and predictions
+- ☁️ **AWS Deployment** — Lambda + S3 + CloudFront with Terraform *(in progress)*
 
-### `npm run build`
+---
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Tech Stack
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+| Layer | Technology |
+|---|---|
+| ML Model | XGBoost, scikit-learn, Pandas, NumPy |
+| Data Sources | NBA Stats API, ESPN Injury API |
+| Backend | Python, Flask, Flask-CORS |
+| Frontend | React, Axios |
+| Cloud | AWS Lambda, S3, CloudFront *(in progress)* |
+| Infrastructure | Terraform *(in progress)* |
+| Version Control | Git, GitHub |
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+---
 
-### `npm run eject`
+## Project Structure
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```
+baseline/
+├── backend/
+│   ├── data_pipeline.py   # NBA & ESPN API data ingestion + caching
+│   ├── model.py           # Feature engineering + XGBoost model
+│   └── app.py             # Flask REST API
+├── frontend/
+│   └── src/
+│       ├── App.js         # Main React component
+│       └── App.css        # Styling
+├── data/                  # Local cache (gitignored)
+├── notebooks/             # Exploratory analysis
+├── requirements.txt       # Python dependencies
+└── README.md
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+---
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## API Endpoints
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+| Endpoint | Description |
+|---|---|
+| `GET /` | Health check |
+| `GET /games` | Today's NBA games with team abbreviations and tip-off times |
+| `GET /predict/<home>/<away>` | Point predictions for every player on both rosters |
 
-## Learn More
+---
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Model Performance
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+| Metric | Value |
+|---|---|
+| Algorithm | XGBoost Regression |
+| Training Data | 4 NBA Seasons (2021–2025) |
+| Games Trained On | 250+ per player |
+| Mean Absolute Error | 7.2 points |
 
-### Code Splitting
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Getting Started
 
-### Analyzing the Bundle Size
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- pip
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Backend Setup
 
-### Making a Progressive Web App
+```bash
+# Clone the repo
+git clone https://github.com/chawlahimanshu/Baseline.git
+cd Baseline
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+# Create and activate virtual environment
+python -m venv venv
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # Mac/Linux
 
-### Advanced Configuration
+# Install dependencies
+pip install -r requirements.txt
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+# Run Flask API
+cd backend
+python app.py
+```
 
-### Deployment
+API runs at `http://127.0.0.1:5000`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+### Frontend Setup
 
-### `npm run build` fails to minify
+```bash
+# In a new terminal
+cd frontend
+npm install
+npm start
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+App runs at `http://localhost:3000`
+
+---
+
+## Roadmap
+
+- [x] Data pipeline (NBA Stats API + ESPN Injury API)
+- [x] XGBoost prediction model
+- [x] Smart caching layer
+- [x] Flask REST API
+- [x] React dashboard
+- [ ] AWS deployment with Terraform
+- [ ] Improve MAE below 5.0
+- [ ] Add rebounds and assists predictions
+- [ ] Player prop comparison vs sportsbook lines
+
+---
+
+## Author
+
+**Himanshu Chawla**
+- GitHub: [@chawlahimanshu](https://github.com/chawlahimanshu)
+- LinkedIn: [linkedin.com/in/himanshuchawla-](https://linkedin.com/in/himanshuchawla-)
