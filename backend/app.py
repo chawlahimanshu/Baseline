@@ -1,173 +1,79 @@
-from nba_api.stats.endpoints import playergamelog, scoreboardv2, commonteamroster
-from nba_api.stats.static import players, teams
+from flask import Flask, jsonify
+from flask_cors import CORS
+from data_pipeline import get_player_stats
+from model import build_features, train_model, predict
+from nba_api.stats.endpoints import scoreboardv2, commonteamroster
+from nba_api.stats.static import teams
 import pandas as pd
-import requests
+import time
 
-# ============================================================
-# SECTION 1 - PLAYER STATS
-# ============================================================
+app = Flask(__name__)
+CORS(app)
 
-# Load all players once at the top so we don't call it repeatedly
-all_players = players.get_players()
+all_teams = teams.get_teams()
+team_lookup = {team['id']: team['abbreviation'] for team in all_teams}
+team_id_lookup = {team['abbreviation']: team['id'] for team in all_teams}
 
-def get_player_id(player_name):
-    """Convert a player name to their NBA ID"""
-    for player in all_players:
-        if player['full_name'].lower() == player_name.lower():
-            return player['id']
-    return None
+@app.route('/')
+def home():
+    return jsonify({"message": "Baseline API is running"})
 
-def get_player_stats(player_name):
-    """Pull last 10 games for a player"""
-    player_id = get_player_id(player_name)
+@app.route('/games')
+def get_games():
+    try:
+        scoreboard = scoreboardv2.ScoreboardV2()
+        games = scoreboard.get_data_frames()[0]
+        game_list = []
+        seen = set()
+        for _, game in games.iterrows():
+            game_id = game["GAME_ID"]
+            if game_id in seen:
+                continue
+            seen.add(game_id)
+            game_list.append({
+                "game_id": game_id,
+                "home_team": team_lookup.get(game["HOME_TEAM_ID"], "Unknown"),
+                "away_team": team_lookup.get(game["VISITOR_TEAM_ID"], "Unknown"),
+                "status": game["GAME_STATUS_TEXT"]
+            })
+        return jsonify({"games": game_list})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/predict/<home_team>/<away_team>')
+def predict_game(home_team, away_team):
+    results = {"home_team": home_team, "away_team": away_team, "predictions": {"home": [], "away": []}}
     
-    if player_id is None:
-        print(f"Player '{player_name}' not found.")
-        return None
-    
-    # Try current season first, fall back to last season
-    for season in ['2025-26', '2024-25']:
+    for side, team_abbr, is_home in [("home", home_team, 1), ("away", away_team, 0)]:
         try:
-            gamelog = playergamelog.PlayerGameLog(
-                player_id=player_id,
-                season=season
-            )
-            df = gamelog.get_data_frames()[0]
-            if len(df) > 0:
-                print(f"Found {len(df)} games in {season} season")
-                break
-        except:
-            continue
+            team_id = team_id_lookup.get(team_abbr.upper())
+            if not team_id:
+                continue
+            roster = commonteamroster.CommonTeamRoster(team_id=team_id)
+            players = roster.get_data_frames()[0]
+            time.sleep(1)
+            
+            for _, player in players.iterrows():
+                player_name = player["PLAYER"]
+                try:
+                    df = get_player_stats(player_name)
+                    if df is None or len(df) < 10:
+                        continue
+                    df = build_features(df)
+                    model = train_model(df)
+                    opponent = away_team if is_home else home_team
+                    predicted_pts = predict(model, df, opponent, is_home)
+                    results["predictions"][side].append({
+                        "player": player_name,
+                        "predicted_points": round(float(predicted_pts), 1)
+                    })
+                    time.sleep(0.5)
+                except Exception:
+                    continue
+        except Exception as e:
+            results["predictions"][side] = {"error": str(e)}
     
-    # Take only last 10 games
-    df = df.head(10)
-    
-    # Save to CSV
-    filename = f"../data/{player_name.replace(' ', '_')}_last10.csv"
-    df.to_csv(filename, index=False)
-    print(f"Saved last 10 games to {filename}")
-    
-    return df
+    return jsonify(results)
 
-def get_rolling_averages(df, windows=[5, 10]):
-    """Calculate rolling averages for key stats"""
-    stats = ['PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV', 'MIN']
-    
-    for window in windows:
-        for stat in stats:
-            if stat in df.columns:
-                df[f'{stat}_last_{window}'] = df[stat].rolling(window).mean()
-    
-    return df
-
-# ============================================================
-# SECTION 2 - INJURY REPORT
-# ============================================================
-
-def get_injury_report():
-    """Pull current NBA injury report from ESPN"""
-    url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries"
-    response = requests.get(url)
-    data = response.json()
-    
-    injured_players = {}
-    
-    for team in data['injuries']:
-        for player in team['injuries']:
-            name = player['athlete']['displayName']
-            status = player['status']
-            detail = player.get('shortComment', 'No details')
-            injured_players[name.lower()] = {
-                'status': status,
-                'detail': detail
-            }
-    
-    return injured_players
-
-# ============================================================
-# SECTION 3 - TODAY'S ROSTER + INJURY STATUS
-# ============================================================
-
-def get_team_players_today(team_name):
-    """Show who is playing today for a team and their injury status"""
-    
-    # Step 1 - find the team ID
-    all_teams = teams.get_teams()
-    matching = [t for t in all_teams if team_name.lower() in t['full_name'].lower()]
-    
-    if not matching:
-        print(f"Team '{team_name}' not found.")
-        return None
-    
-    team = matching[0]
-    team_id = team['id']
-    print(f"Found team: {team['full_name']} (ID: {team_id})")
-    
-    # Step 2 - check if team is playing today
-    board = scoreboardv2.ScoreboardV2()
-    games_df = board.get_data_frames()[0]
-    
-    team_playing = games_df[
-        (games_df['HOME_TEAM_ID'] == team_id) |
-        (games_df['VISITOR_TEAM_ID'] == team_id)
-    ]
-    
-    if len(team_playing) == 0:
-        print(f"{team['full_name']} are not playing today.")
-        return None
-    
-    print(f"{team['full_name']} are playing today!")
-    
-    # Step 3 - get their roster
-    roster = commonteamroster.CommonTeamRoster(team_id=team_id)
-    roster_df = roster.get_data_frames()[0]
-    
-    # Step 4 - get injury report and cross reference
-    print("\nCurrent Roster + Injury Status:")
-    print("-" * 50)
-    injuries = get_injury_report()
-    
-    active = []
-    injured = []
-    
-    for _, player in roster_df.iterrows():
-        name = player['PLAYER']
-        position = player['POSITION']
-        injury_info = injuries.get(name.lower())
-        
-        if injury_info:
-            status = injury_info['status']
-            detail = injury_info['detail']
-            injured.append(f"❌ {name} ({position}) — {status}: {detail}")
-        else:
-            active.append(f"✅ {name} ({position}) — Active")
-    
-    print("\nACTIVE PLAYERS:")
-    for p in active:
-        print(p)
-    
-    print("\nINJURED PLAYERS:")
-    for p in injured:
-        print(p)
-    
-    return roster_df
-
-
-# ============================================================
-# RUN IT
-# ============================================================
-
-if __name__ == "__main__":
-    # Test 1 - get player stats
-    print("=" * 50)
-    print("PLAYER STATS")
-    print("=" * 50)
-    df = get_player_stats("LeBron James")
-    if df is not None:
-        print(df[['GAME_DATE', 'MATCHUP', 'PTS', 'REB', 'AST']].to_string())
-    
-    # Test 2 - get team roster + injuries
-    print("\n" + "=" * 50)
-    print("TEAM ROSTER + INJURIES")
-    print("=" * 50)
-    get_team_players_today("Lakers")
+if __name__ == '__main__':
+    app.run(debug=True)
